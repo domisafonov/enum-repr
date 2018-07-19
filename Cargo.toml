@@ -5,7 +5,7 @@ authors = ["Dmitry Safonov <dimanss47@dimanss47.net>"]
 description = "Derive enum repr conversions compatible with type aliases."
 repository = "https://github.com/dmnsafonov/enum-repr"
 readme = "README.md"
-keywords = ["constant", "enum", "enum discriminant", "enum repr"]
+keywords = ["constant", "discriminant", "enum", "repr"]
 license = "LGPL-3.0-only"
 
 [lib]
