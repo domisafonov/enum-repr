@@ -12,6 +12,8 @@
 //! and `fn from_repr(x: EnumReprType) -> Option<Self>` are generated.
 //! The real enum discriminant still remains `isize`.
 //!
+//! The code generated does not require std.
+//!
 //! # Examples
 //! ```
 //! #[macro_use] extern crate enum_repr;

@@ -4,7 +4,7 @@
 [![Crates.io](https://img.shields.io/crates/v/enum-repr.svg)](https://crates.io/crates/enum-repr)
 [![Documentation](https://docs.rs/enum-repr/badge.svg)](https://docs.rs/enum-repr)
 
-Derive enum repr conversions compatible with type aliases.
+Derive enum repr conversions compatible with type aliases.  Works on `no_std`.
 
 `EnumRepr` proc macro takes an `EnumReprType` argument and defines
 two functions for the enum derived on: `fn repr(&self) -> EnumReprType`
