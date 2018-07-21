@@ -1,0 +1,8 @@
+[package]
+name = "nostdtest"
+version = "0.1.0"
+authors = ["Dmitry Safonov <dimanss47@dimanss47.net>"]
+
+[dependencies.enum-repr]
+path = "../../"
+default-features = false

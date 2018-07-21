@@ -7,3 +7,8 @@ rust:
 matrix:
     allow_failures:
         - rust: nightly
+
+script:
+    - cargo build
+    - cargo test
+    - make -f test/Makefile
