@@ -146,7 +146,7 @@ pub fn enum_repr(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
     let gen = quote! {
         impl #impl_generics #ty #ty_generics #where_clause {
-            const var_to_discr: [(#repr_ty, #ty); #vars_len] = [
+            const VAR_TO_DISCR: [(#repr_ty, #ty); #vars_len] = [
                 #( (#discrs as #repr_ty_repeat2, #ty_repeat :: #names) ),*
             ];
 
@@ -158,7 +158,7 @@ pub fn enum_repr(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
             }
 
             #vis fn from_repr(x: #repr_ty3) -> Option<#ty> {
-                for (v,d) in &Self::var_to_discr {
+                for (v,d) in &Self::VAR_TO_DISCR {
                     if x == *v {
                         return Some((*d).clone());
                     }
