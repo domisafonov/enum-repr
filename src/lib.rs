@@ -21,7 +21,7 @@
 //!
 //! use libc::*;
 //!
-//! #[derive(Clone, Debug, PartialEq)]
+//! #[derive(Debug, PartialEq)]
 //! #[derive(EnumRepr)]
 //! #[EnumReprType = "c_int"]
 //! pub enum IpProto {
@@ -43,7 +43,7 @@
 //! #
 //! # use libc::*;
 //! #
-//! # #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+//! # #[derive(Debug, Eq, Hash, PartialEq)]
 //! #[derive(EnumRepr)]
 //! #[EnumReprType = "c_int"]
 //! pub enum InetDomain {
@@ -51,7 +51,7 @@
 //!     // …
 //! }
 //!
-//! # #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+//! # #[derive(Debug, Eq, Hash, PartialEq)]
 //! #[derive(EnumRepr)]
 //! #[EnumReprType = "c_int"]
 //! pub enum SocketType {
@@ -75,7 +75,7 @@
 //! ```
 //! # #[macro_use] extern crate enum_repr;
 //! #
-//! #[derive(Clone, PartialEq)]
+//! #[derive(PartialEq)]
 //! #[derive(EnumRepr)]
 //! #[EnumReprType = "u16"]
 //! enum En {
@@ -92,7 +92,7 @@
 //!
 //! # #[macro_use] extern crate enum_repr;
 //! #
-//! #[derive(Clone, PartialEq)]
+//! #[derive(PartialEq)]
 //! #[derive(EnumRepr)]
 //! #[EnumReprType = "u16"]
 //! enum En {
