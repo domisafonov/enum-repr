@@ -20,7 +20,6 @@
 //!
 //! use libc::*;
 //!
-//! /// Represents a layer 3 network protocol.
 //! #[derive(Debug, PartialEq)]
 //! #[derive(EnumRepr)]
 //! #[EnumReprType = "c_int"]
@@ -66,6 +65,27 @@
 //!    socket(InetDomain::Inet.repr(), SocketType::Stream.repr(), 0) != -1
 //! );
 //! # }}
+//! ```
+//!
+//! ```
+//! # #[macro_use] extern crate enum_repr;
+//! # extern crate libc;
+//! #
+//! # use libc::*;
+//! #
+//! // compatible with documentation and other attributes
+//!
+//! /// Represents a layer 3 network protocol.
+//! #[derive(Debug, PartialEq)]
+//! #[derive(EnumRepr)]
+//! #[EnumReprType = "c_int"]
+//! pub enum IpProto {
+//!     IP = IPPROTO_IP as isize,
+//!     IPv6 = IPPROTO_IPV6 as isize,
+//!     // …
+//! }
+//! #
+//! # fn main() {}
 //! ```
 //!
 //! # Limitations
