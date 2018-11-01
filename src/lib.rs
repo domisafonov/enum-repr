@@ -1,4 +1,4 @@
-#![warn(clippy::pedantic)]
+#![cfg_attr(feature = "nightly", warn(clippy::pedantic))]
 
 #![recursion_limit = "128"]
 
