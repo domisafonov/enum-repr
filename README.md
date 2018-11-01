@@ -17,7 +17,7 @@ extern crate libc;
 
 use libc::*;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Debug, PartialEq)]
 #[derive(EnumRepr)]
 #[EnumReprType = "c_int"]
 pub enum IpProto {
