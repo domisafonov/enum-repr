@@ -1,4 +1,4 @@
-#![allow(unknown_lints)]
+#![warn(clippy::pedantic)]
 
 #![recursion_limit = "128"]
 
