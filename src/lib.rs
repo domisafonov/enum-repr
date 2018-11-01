@@ -21,6 +21,7 @@
 //!
 //! use libc::*;
 //!
+//! /// Represents a layer 3 network protocol.
 //! #[derive(Clone, Debug, PartialEq)]
 //! #[derive(EnumRepr)]
 //! #[EnumReprType = "c_int"]
