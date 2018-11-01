@@ -190,25 +190,27 @@ pub fn enum_repr(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 fn get_repr_type(derive: &DeriveInput) -> Ident {
     let mut found_ident = None;
     for attr in &derive.attrs {
-        if let Some(Meta::NameValue(MetaNameValue {
-            ident,
-            lit: Lit::Str(repr_ty),
-            ..
-        })) = attr.interpret_meta()
-        {
+        if let Some(Meta::NameValue(
+                MetaNameValue {
+                    ident,
+                    lit: Lit::Str(repr_ty),
+                    ..
+                })) = attr.interpret_meta() {
+            if found_ident.is_some() && ident == "EnumReprType" {
+                panic!("specify #[EnumReprType = \"...\"] exactly once \
+                    for an enum");
+            }
             if ident == "EnumReprType" {
-                if found_ident.is_some() {
-                    panic!("specify #[EnumReprType = \"...\"] exactly once for an enum");
-                }
-                found_ident = Some(Ident::new(&repr_ty.value(), Span::call_site()));
+                found_ident = Some(Ident::new(
+                    &repr_ty.value(),
+                    Span::call_site())
+                );
             }
         }
     }
-    if let Some(found_ident) = found_ident {
-        found_ident
-    } else {
-        panic!("specify #[EnumReprType = \"...\"] exactly once for an enum");
-    }
+    found_ident.unwrap_or_else(|| panic!("specify #[EnumReprType = \"...\"] \
+        exactly once for an enum"))
+
 }
 
 fn get_vars(
