@@ -1,5 +1,4 @@
 #![allow(unknown_lints)]
-#![warn(clippy)]
 
 #![recursion_limit = "128"]
 
@@ -21,6 +20,7 @@
 //!
 //! use libc::*;
 //!
+//! /// Represents a layer 3 network protocol.
 //! #[derive(Clone, Debug, PartialEq)]
 //! #[derive(EnumRepr)]
 //! #[EnumReprType = "c_int"]
@@ -122,7 +122,7 @@ pub fn enum_repr(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let repr_ty = get_repr_type(&derive);
     let vars = get_vars(&derive);
 
-    validate(&derive, &vars);
+    validate(&vars);
 
     let ty = derive.ident;
     let vis = derive.vis;
@@ -174,13 +174,26 @@ pub fn enum_repr(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 }
 
 fn get_repr_type(derive: &DeriveInput) -> Ident {
-    match derive.attrs[0].interpret_meta() {
-        Some(Meta::NameValue(MetaNameValue
-                { ident, lit: Lit::Str(repr_ty), .. })) => {
-            assert_eq!(ident.to_string(), "EnumReprType");
-            Ident::new(&repr_ty.value(), Span::call_site())
-        },
-        _ => panic!("invalid #[EnumReprType] syntax")
+    let mut found_ident = None;
+    for attr in &derive.attrs {
+        if let Some(Meta::NameValue(MetaNameValue {
+            ident,
+            lit: Lit::Str(repr_ty),
+            ..
+        })) = attr.interpret_meta()
+        {
+            if ident == "EnumReprType" {
+                if found_ident.is_some() {
+                    panic!("specify #[EnumReprType = \"...\"] exactly once for an enum");
+                }
+                found_ident = Some(Ident::new(&repr_ty.value(), Span::call_site()));
+            }
+        }
+    }
+    if let Some(found_ident) = found_ident {
+        found_ident
+    } else {
+        panic!("specify #[EnumReprType = \"...\"] exactly once for an enum");
     }
 }
 
@@ -193,14 +206,7 @@ fn get_vars(
     }
 }
 
-fn validate(
-    derive: &DeriveInput,
-    vars: &punctuated::Punctuated<Variant, token::Comma>
-) {
-    if derive.attrs.len() != 1 {
-        panic!("specify #[EnumReprType = \"...\"] exactly once for an enum");
-    }
-
+fn validate(vars: &punctuated::Punctuated<Variant, token::Comma>) {
     for i in vars {
         match i.fields {
             Fields::Named(_) | Fields::Unnamed(_) =>
