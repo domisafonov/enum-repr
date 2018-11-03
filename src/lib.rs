@@ -155,13 +155,31 @@ pub fn enum_repr(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
     let vars_len = vars.len();
 
+    let discrs_unconverted: Vec<_> = discrs.iter().map(|x| {
+        match x {
+            Expr::Cast(ExprCast { expr, ty, .. }) => {
+                match **ty {
+                    Type::Path(TypePath { .. }) => (),
+                    _ => panic!("Enum discriminant casts must be in the exact \
+                        form of \"CONST as isize\".  Caution: if you need \
+                        to cast into the repr type, then do \
+                        \"CONST as REPR_TYPE as isize\"")
+                }
+                (**expr).clone()
+            },
+            _ => x.clone()
+        }
+    }).collect();
+
     let (names2, discrs2) = (names.clone(), discrs.clone());
     let repr_ty2 = repr_ty.clone();
     let repr_ty3 = repr_ty.clone();
 
     let ty_repeat = iter::repeat(ty.clone()).take(vars_len);
+    let ty_repeat2 = ty_repeat.clone();
     let repr_ty_repeat = iter::repeat(repr_ty.clone()).take(vars_len);
     let repr_ty_repeat2 = iter::repeat(repr_ty.clone()).take(vars_len);
+    let repr_ty_repeat3 = iter::repeat(repr_ty.clone()).take(vars_len);
 
     let (impl_generics, ty_generics, where_clause) =
         derive.generics.split_for_impl();
@@ -169,17 +187,23 @@ pub fn enum_repr(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let gen = quote! {
         impl #impl_generics #ty #ty_generics #where_clause {
             #vis fn repr(&self) -> #repr_ty2 {
-                use #ty::*;
                 match self {
-                    #( #names2 => #discrs2 as #repr_ty_repeat ),*
+                    #( #ty_repeat2::#names2 => #discrs2 as #repr_ty_repeat ),*
                 }
             }
 
             #vis fn from_repr(x: #repr_ty3) -> Option<#ty> {
                 match x {
-                    #( x if x == #discrs as #repr_ty_repeat2 => Some(#ty_repeat :: #names),)*
+                    #( x if x == #discrs as #repr_ty_repeat2 => Some(#ty_repeat :: #names), )*
                     _ => None,
                 }
+            }
+
+            #[doc(hidden)]
+            #[allow(dead_code)]
+            fn _enum_repr_type_check() {
+                #( let x: #repr_ty_repeat3 = #discrs_unconverted; )*
+                panic!("do not call")
             }
         }
     };
@@ -210,7 +234,6 @@ fn get_repr_type(derive: &DeriveInput) -> Ident {
     }
     found_ident.unwrap_or_else(|| panic!("specify #[EnumReprType = \"...\"] \
         exactly once for an enum"))
-
 }
 
 fn get_vars(
