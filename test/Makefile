@@ -14,4 +14,4 @@ nostdtest:
 	cargo build
 
 clean:
-	rm -rf $(BUILD_DIR)/test/*/{Cargo.lock,target/}
+	bash -c "rm -rf $(BUILD_DIR)/test/*/{Cargo.lock,target/}"
