@@ -2,30 +2,33 @@
 
 #![recursion_limit = "128"]
 
-//! Derive enum repr conversions compatible with type aliases.
+//! Generate enum repr conversions compatible with type aliases.
 //!
-//! Derive with `#[derive(EnumRepr)]`.  The repr type is set
-//! by `#[EnumReprType = "..."]`.
+//! Generate with `#[EnumRepr(type = "TYPE")]`.
 //!
-//! Functions `fn repr(&self) -> EnumReprType`
-//! and `fn from_repr(x: EnumReprType) -> Option<Self>` are generated.
+//! Functions generated are
+//! ```ignore
+//! fn repr(&self) -> EnumReprType
+//! fn from_repr(x: EnumReprType) -> Option<Self>
+//! ```
 //! The real enum discriminant still remains `isize`.
 //!
 //! The code generated does not require std.
 //!
 //! # Examples
 //! ```
-//! #[macro_use] extern crate enum_repr;
+//! extern crate enum_repr;
 //! extern crate libc;
 //!
 //! use libc::*;
 //!
+//! use enum_repr::EnumRepr;
+//!
+//! #[EnumRepr(type = "c_int")]
 //! #[derive(Debug, PartialEq)]
-//! #[derive(EnumRepr)]
-//! #[EnumReprType = "c_int"]
 //! pub enum IpProto {
-//!     IP = IPPROTO_IP as isize,
-//!     IPv6 = IPPROTO_IPV6 as isize,
+//!     IP = IPPROTO_IP,
+//!     IPv6 = IPPROTO_IPV6,
 //!     // …
 //! }
 //!
@@ -37,22 +40,22 @@
 //! ```
 //!
 //! ```
-//! # #[macro_use] extern crate enum_repr;
+//! # extern crate enum_repr;
 //! # extern crate libc;
 //! #
 //! # use libc::*;
 //! #
+//! # use enum_repr::EnumRepr;
+//! #
+//! #[EnumRepr(type = "c_int")]
 //! # #[derive(Debug, Eq, Hash, PartialEq)]
-//! #[derive(EnumRepr)]
-//! #[EnumReprType = "c_int"]
 //! pub enum InetDomain {
 //!     Inet = 2,
 //!     // …
 //! }
 //!
+//! #[EnumRepr(type = "c_int")]
 //! # #[derive(Debug, Eq, Hash, PartialEq)]
-//! #[derive(EnumRepr)]
-//! #[EnumReprType = "c_int"]
 //! pub enum SocketType {
 //!     Stream = 1,
 //!     // …
@@ -67,61 +70,59 @@
 //! # }}
 //! ```
 //!
-//! ```
-//! # #[macro_use] extern crate enum_repr;
+//! ```no_run
+//! # extern crate enum_repr;
 //! # extern crate libc;
 //! #
 //! # use libc::*;
 //! #
+//! # use enum_repr::EnumRepr;
+//! #
 //! // compatible with documentation and other attributes
 //!
 //! /// Represents a layer 3 network protocol.
+//! #[EnumRepr(type = "c_int")]
 //! #[derive(Debug, PartialEq)]
-//! #[derive(EnumRepr)]
-//! #[EnumReprType = "c_int"]
 //! pub enum IpProto {
-//!     IP = IPPROTO_IP as isize,
-//!     IPv6 = IPPROTO_IPV6 as isize,
+//!     IP = IPPROTO_IP,
+//!     IPv6 = IPPROTO_IPV6,
 //!     // …
 //! }
 //! #
 //! # fn main() {}
 //! ```
 //!
-//! # Limitations
-//! No warnings are produced if out-of-bounds integer literals are specified.
-//! E.g, a variant like `A = 65537` would compile with `EnumReprType = "u16"`
-//! silently:
-//! ```
-//! # #[macro_use] extern crate enum_repr;
+//! Out of bound discriminants fail to compile:
+//! ```compile_fail
+//! # #![deny(overflowing_literals)]
+//! # extern crate enum_repr;
 //! #
-//! #[derive(PartialEq)]
-//! #[derive(EnumRepr)]
-//! #[EnumReprType = "u16"]
-//! enum En {
-//!     A = 65537
+//! # use enum_repr::EnumRepr;
+//! #
+//! #[EnumRepr(type = "u8")]
+//! enum Test {
+//!     A = 256
 //! }
 //! #
 //! # fn main() {}
 //! ```
 //!
-//! The solution is to use the `A = 65537u16 as isize` form or
-//! a named constant.  E.g.,
-//! ```rust,compile_fail
-//! #![deny(overflowing_literals)]
-//!
-//! # #[macro_use] extern crate enum_repr;
+//! Discriminants of a wrong type fail to compile as well:
+//! ```compile_fail
+//! # #![deny(overflowing_literals)]
+//! # extern crate enum_repr;
 //! #
-//! #[derive(PartialEq)]
-//! #[derive(EnumRepr)]
-//! #[EnumReprType = "u16"]
-//! enum En {
-//!     A = 65537u16 as isize
+//! # use enum_repr::EnumRepr;
+//! #
+//! const C: u16 = 256;
+//!
+//! #[EnumRepr(type = "u8")]
+//! enum Test {
+//!     A = C
 //! }
 //! #
 //! # fn main() {}
 //! ```
-//! fails to compile.
 
 extern crate proc_macro;
 extern crate proc_macro2;
@@ -135,7 +136,7 @@ use proc_macro::TokenStream;
 use quote::ToTokens;
 use syn::*;
 
-/// The derivation function
+/// The code generator
 #[allow(non_snake_case)]
 #[proc_macro_attribute]
 pub fn EnumRepr(
