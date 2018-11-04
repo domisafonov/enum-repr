@@ -1,20 +1,20 @@
 #![allow(dead_code)]
 #![no_std]
 
-#[macro_use] extern crate enum_repr;
+extern crate enum_repr;
+
+use enum_repr::EnumRepr;
 
 type T = u8;
 
-#[derive(Clone, EnumRepr, PartialEq)]
-#[EnumReprType = "T"]
+#[EnumRepr(type = "T")]
 enum En {
-    A = 1u8 as isize,
-    B = 2u8 as isize
+    A = 1,
+    B = 2
 }
 
-#[derive(Clone, EnumRepr, PartialEq)]
-#[EnumReprType = "T"]
+#[EnumRepr(type = "T")]
 pub enum PubEn {
-    A = 1u8 as isize,
-    B = 2u8 as isize
+    A = 1,
+    B = 2
 }
