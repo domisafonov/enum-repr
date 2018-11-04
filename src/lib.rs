@@ -130,48 +130,39 @@ extern crate syn;
 
 use std::iter;
 
-use proc_macro2::*;
+use proc_macro2::Span;
+use proc_macro::TokenStream;
+use quote::ToTokens;
 use syn::*;
 
 /// The derivation function
-#[proc_macro_derive(EnumRepr, attributes(EnumReprType))]
-pub fn enum_repr(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let derive = syn::parse::<DeriveInput>(input)
-        .expect("#[derive(EnumRepr)] could not parse input");
+#[allow(non_snake_case)]
+#[proc_macro_attribute]
+pub fn EnumRepr(
+    args: TokenStream,
+    input: TokenStream
+) -> TokenStream {
+    let input = syn::parse::<ItemEnum>(input)
+        .expect("#[EnumRepr] must only be used on enums");
 
-    let repr_ty = get_repr_type(&derive);
-    let vars = get_vars(&derive);
+    let repr_ty = get_repr_type(args);
 
-    validate(&vars);
+    validate(&input.variants);
 
-    let ty = derive.ident;
-    let vis = derive.vis;
+    let ty = input.ident.clone();
+    let vis = input.vis.clone();
 
-    let (names, discrs): (Vec<_>, Vec<_>) = vars.iter()
+    let (names, discrs): (Vec<_>, Vec<_>) = input.variants.iter()
         .map(|x| (
             x.ident.clone(),
-            x.discriminant.as_ref().unwrap().1.clone()
+            x.discriminant.as_ref()
+                .expect("no discriminant for a variant").1.clone()
         )).unzip();
 
-    let vars_len = vars.len();
+    let vars_len = input.variants.len();
 
-    let discrs_unconverted: Vec<_> = discrs.iter().map(|x| {
-        match x {
-            Expr::Cast(ExprCast { expr, ty, .. }) => {
-                match **ty {
-                    Type::Path(TypePath { .. }) => (),
-                    _ => panic!("Enum discriminant casts must be in the exact \
-                        form of \"CONST as isize\".  Caution: if you need \
-                        to cast into the repr type, then do \
-                        \"CONST as REPR_TYPE as isize\"")
-                }
-                (**expr).clone()
-            },
-            _ => x.clone()
-        }
-    }).collect();
-
-    let (names2, discrs2) = (names.clone(), discrs.clone());
+    let (names2, discrs2, discrs3) =
+        (names.clone(), discrs.clone(), discrs.clone());
     let repr_ty2 = repr_ty.clone();
     let repr_ty3 = repr_ty.clone();
 
@@ -182,9 +173,10 @@ pub fn enum_repr(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let repr_ty_repeat3 = iter::repeat(repr_ty.clone()).take(vars_len);
 
     let (impl_generics, ty_generics, where_clause) =
-        derive.generics.split_for_impl();
+        input.generics.split_for_impl();
 
-    let gen = quote! {
+    let mut ret: TokenStream = convert_variants(&input).into_token_stream().into();
+    let gen: TokenStream = { quote! {
         impl #impl_generics #ty #ty_generics #where_clause {
             #vis fn repr(&self) -> #repr_ty2 {
                 match self {
@@ -195,53 +187,40 @@ pub fn enum_repr(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
             #vis fn from_repr(x: #repr_ty3) -> Option<#ty> {
                 match x {
                     #( x if x == #discrs as #repr_ty_repeat2 => Some(#ty_repeat :: #names), )*
-                    _ => None,
+                    _ => None
                 }
             }
 
             #[doc(hidden)]
             #[allow(dead_code)]
-            fn _enum_repr_type_check() {
-                #( let x: #repr_ty_repeat3 = #discrs_unconverted; )*
-                panic!("do not call")
+            fn _enum_repr_typecheck() {
+                #( let _x: #repr_ty_repeat3 = #discrs3; )*
+                panic!("don't call me!")
             }
         }
-    };
+    }}.into();
+    ret.extend(gen);
 
-    gen.into()
+    ret
 }
 
-fn get_repr_type(derive: &DeriveInput) -> Ident {
-    let mut found_ident = None;
-    for attr in &derive.attrs {
-        if let Some(Meta::NameValue(
-                MetaNameValue {
-                    ident,
-                    lit: Lit::Str(repr_ty),
-                    ..
-                })) = attr.interpret_meta() {
-            if found_ident.is_some() && ident == "EnumReprType" {
-                panic!("specify #[EnumReprType = \"...\"] exactly once \
-                    for an enum");
+fn get_repr_type(args: TokenStream) -> Ident {
+    let args = syn::parse::<Meta>(args).expect("specify repr type in format \
+            \"#[EnumRepr]\"");
+    match args {
+        Meta::NameValue(MetaNameValue {
+            ident, lit: Lit::Str(repr_ty), ..
+        }) => {
+            if ident.to_string() != "type" {
+                panic!("#[EnumRepr] accepts one argument named \"type\"")
             }
-            if ident == "EnumReprType" {
-                found_ident = Some(Ident::new(
-                    &repr_ty.value(),
-                    Span::call_site())
-                );
-            }
-        }
-    }
-    found_ident.unwrap_or_else(|| panic!("specify #[EnumReprType = \"...\"] \
-        exactly once for an enum"))
-}
-
-fn get_vars(
-    derive: &DeriveInput
-) -> punctuated::Punctuated<Variant, token::Comma> {
-    match derive.data {
-        Data::Enum(ref en) => en.variants.clone(),
-        _ => panic!("#[derive(EnumRepr)] is only implemented for enums")
+            Ident::new(
+                &repr_ty.value(),
+                Span::call_site()
+            )
+        },
+        _ => panic!("specify repr type in format \
+            \"#[EnumRepr(type = \"TYPE\")]\"")
     }
 }
 
@@ -250,8 +229,25 @@ fn validate(vars: &punctuated::Punctuated<Variant, token::Comma>) {
         match i.fields {
             Fields::Named(_) | Fields::Unnamed(_) =>
                 panic!("the enum's fields must \
-                    be in the \"ident = number literal\" form"),
+                    be in the \"ident = discriminant\" form"),
             Fields::Unit => ()
         }
+    }
+}
+
+fn convert_variants(input: &ItemEnum) -> ItemEnum {
+    let mut variants = input.variants.clone();
+
+    variants.iter_mut().for_each(|ref mut var| {
+        let discr = var.discriminant.clone().unwrap();
+        let expr = discr.1.into_token_stream();
+        let new_expr = parse_quote!( (#expr) as isize );
+        var.discriminant = Some((discr.0, new_expr));
+    });
+
+    let ret = input.clone();
+    ItemEnum {
+        variants,
+        .. ret
     }
 }
