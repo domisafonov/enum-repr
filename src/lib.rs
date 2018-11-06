@@ -11,7 +11,7 @@
 //! fn repr(&self) -> EnumReprType
 //! fn from_repr(x: EnumReprType) -> Option<Self>
 //! ```
-//! The real enum discriminant still remains `isize`.
+//! The real enum discriminant is forced to be `isize`.
 //!
 //! The code generated does not require std.
 //!
@@ -246,9 +246,13 @@ fn convert_variants(input: &ItemEnum) -> ItemEnum {
         var.discriminant = Some((discr.0, new_expr));
     });
 
+    let mut attrs = input.attrs.clone();
+    attrs.push(parse_quote!( #[repr(isize)] ));
+
     let ret = input.clone();
     ItemEnum {
         variants,
+        attrs,
         .. ret
     }
 }
