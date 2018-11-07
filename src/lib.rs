@@ -11,7 +11,14 @@
 //! fn repr(&self) -> EnumReprType
 //! fn from_repr(x: EnumReprType) -> Option<Self>
 //! ```
-//! The real enum discriminant is forced to be `isize`.
+//! The real enum discriminant is usually forced to be `#[repr(isize)]`.
+//! If `u*` or `i*` types are used for the discriminant, the actual enum
+//! representation is made to be `#[repr(that_type_specified)]`.
+//! The list of types recognized as `u*` and `i*` currently is as follows:
+//! `i8`, `i16`, `i32`, `i64`, `i128`, `u8`, `u16`, `u32`, `u64`, `u128`.
+//! If the type is specified through a type alias, `#[repr(isize)]` is used.
+//! Inability to specify type aliases as enum representations is this crate's
+//! reason to exist.
 //!
 //! The code generated does not require std.
 //!
@@ -123,6 +130,25 @@
 //! #
 //! # fn main() {}
 //! ```
+//!
+//! Using the actual enum discriminant representation:
+//! ```
+//! # extern crate enum_repr;
+//! #
+//! # use std::mem::size_of;
+//! #
+//! # use enum_repr::EnumRepr;
+//! #
+//! #[EnumRepr(type = "u8")]
+//! #[derive(Debug, PartialEq)]
+//! enum Test {
+//!     A = 1
+//! }
+//!
+//! fn main() {
+//!     assert_eq!(size_of::<u8>(), size_of::<Test>());
+//! }
+//! ```
 
 extern crate proc_macro;
 extern crate proc_macro2;
@@ -145,39 +171,43 @@ pub fn EnumRepr(
 ) -> TokenStream {
     let input = syn::parse::<ItemEnum>(input)
         .expect("#[EnumRepr] must only be used on enums");
-
-    let repr_ty = get_repr_type(args);
-
     validate(&input.variants);
 
+    let repr_ty = get_repr_type(args);
+    let compiler_repr_ty = match repr_ty.to_string().as_str() {
+        "i8" | "i16" | "i32" | "i64" | "i128"
+        | "u8" | "u16" | "u32" | "u64" | "u128" | "usize" => repr_ty.clone(),
+        _ => Ident::new(&"isize", Span::call_site())
+    };
+
+    let mut ret: TokenStream = convert_enum(&input, compiler_repr_ty)
+        .into_token_stream().into();
+
+    let gen = generate_code(&input, repr_ty);
+    ret.extend(gen);
+    ret
+}
+
+fn generate_code(input: &ItemEnum, repr_ty: Ident) -> TokenStream {
     let ty = input.ident.clone();
     let vis = input.vis.clone();
-
-    let (names, discrs): (Vec<_>, Vec<_>) = input.variants.iter()
-        .map(|x| (
-            x.ident.clone(),
-            x.discriminant.as_ref()
-                .expect("no discriminant for a variant").1.clone()
-        )).unzip();
-
+    let (names, discrs) = extract_variants(input);
     let vars_len = input.variants.len();
 
     let (names2, discrs2, discrs3) =
         (names.clone(), discrs.clone(), discrs.clone());
     let repr_ty2 = repr_ty.clone();
     let repr_ty3 = repr_ty.clone();
-
     let ty_repeat = iter::repeat(ty.clone()).take(vars_len);
     let ty_repeat2 = ty_repeat.clone();
     let repr_ty_repeat = iter::repeat(repr_ty.clone()).take(vars_len);
-    let repr_ty_repeat2 = iter::repeat(repr_ty.clone()).take(vars_len);
-    let repr_ty_repeat3 = iter::repeat(repr_ty.clone()).take(vars_len);
+    let repr_ty_repeat2 = repr_ty_repeat.clone();
+    let repr_ty_repeat3 = repr_ty_repeat.clone();
 
     let (impl_generics, ty_generics, where_clause) =
         input.generics.split_for_impl();
 
-    let mut ret: TokenStream = convert_variants(&input).into_token_stream().into();
-    let gen: TokenStream = { quote! {
+    let ret: TokenStream = quote! {
         impl #impl_generics #ty #ty_generics #where_clause {
             #vis fn repr(&self) -> #repr_ty2 {
                 match self {
@@ -187,7 +217,7 @@ pub fn EnumRepr(
 
             #vis fn from_repr(x: #repr_ty3) -> Option<#ty> {
                 match x {
-                    #( x if x == #discrs as #repr_ty_repeat2 => Some(#ty_repeat :: #names), )*
+                    #( x if x == #discrs as #repr_ty_repeat2 => Some(#ty_repeat::#names), )*
                     _ => None
                 }
             }
@@ -199,10 +229,18 @@ pub fn EnumRepr(
                 panic!("don't call me!")
             }
         }
-    }}.into();
-    ret.extend(gen);
-
+    }.into();
     ret
+}
+
+fn extract_variants(input: &ItemEnum) -> (Vec<Ident>, Vec<Expr>) {
+    let (names, discrs): (Vec<_>, Vec<_>) = input.variants.iter()
+        .map(|x| (
+            x.ident.clone(),
+            x.discriminant.as_ref()
+                .expect("no discriminant for a variant").1.clone()
+        )).unzip();
+    (names, discrs)
 }
 
 fn get_repr_type(args: TokenStream) -> Ident {
@@ -236,18 +274,18 @@ fn validate(vars: &punctuated::Punctuated<Variant, token::Comma>) {
     }
 }
 
-fn convert_variants(input: &ItemEnum) -> ItemEnum {
+fn convert_enum(input: &ItemEnum, compiler_repr_ty: Ident) -> ItemEnum {
     let mut variants = input.variants.clone();
 
     variants.iter_mut().for_each(|ref mut var| {
         let discr = var.discriminant.clone().unwrap();
         let expr = discr.1.into_token_stream();
-        let new_expr = parse_quote!( (#expr) as isize );
+        let new_expr = parse_quote!( (#expr) as #compiler_repr_ty );
         var.discriminant = Some((discr.0, new_expr));
     });
 
     let mut attrs = input.attrs.clone();
-    attrs.push(parse_quote!( #[repr(isize)] ));
+    attrs.push(parse_quote!( #[repr(#compiler_repr_ty)] ));
 
     let ret = input.clone();
     ItemEnum {
