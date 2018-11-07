@@ -1,6 +1,6 @@
 [package]
 name = "enum-repr"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["Dmitry Safonov <dimanss47@dimanss47.net>"]
 description = "Derive enum repr conversions compatible with type aliases."
 repository = "https://github.com/dmnsafonov/enum-repr"
