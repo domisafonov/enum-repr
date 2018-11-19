@@ -99,6 +99,50 @@
 //! # fn main() {}
 //! ```
 //!
+//! Discriminants can be implicit:
+//! ```
+//! # extern crate enum_repr;
+//! # extern crate libc;
+//! #
+//! # use libc::*;
+//! #
+//! # use enum_repr::EnumRepr;
+//! #
+//!
+//! #[EnumRepr(type = "c_int")]
+//! #[derive(Debug, PartialEq)]
+//! pub enum Test {
+//!     A,
+//!     B,
+//!     C = 5,
+//!     D,
+//! }
+//!
+//! fn main() {
+//!     assert_eq!(Test::B.repr(), 1);
+//!     assert_eq!(Test::from_repr(6), Some(Test::D));
+//!     assert!(Test::from_repr(2).is_none());
+//! }
+//! ```
+//!
+//! Take extra care to avoid collisions when using implicit discriminants:
+//! ```compile_fail
+//! # #![deny(overflowing_literals)]
+//! # extern crate enum_repr;
+//! #
+//! # use enum_repr::EnumRepr;
+//! #
+//! #[EnumRepr(type = "u8")]
+//! enum Test {
+//!     A = 1,
+//!     B,
+//!     C,
+//!     D = 3,
+//! }
+//! #
+//! # fn main() {}
+//! ```
+//!
 //! Out of bound discriminants fail to compile:
 //! ```compile_fail
 //! # #![deny(overflowing_literals)]
@@ -109,6 +153,22 @@
 //! #[EnumRepr(type = "u8")]
 //! enum Test {
 //!     A = 256
+//! }
+//! #
+//! # fn main() {}
+//! ```
+//!
+//! Even if they are implicit:
+//! ```compile_fail
+//! # #![deny(overflowing_literals)]
+//! # extern crate enum_repr;
+//! #
+//! # use enum_repr::EnumRepr;
+//! #
+//! #[EnumRepr(type = "u8")]
+//! enum Test {
+//!     A = 255,
+//!     B
 //! }
 //! #
 //! # fn main() {}
@@ -181,9 +241,9 @@ pub fn EnumRepr(
     };
 
     let new_enum = convert_enum(&input, compiler_repr_ty);
-    let mut ret: TokenStream = new_enum.clone().into_token_stream().into();
+    let mut ret: TokenStream = new_enum.into_token_stream().into();
 
-    let gen = generate_code(&new_enum, repr_ty);
+    let gen = generate_code(&input, repr_ty);
     ret.extend(gen);
     ret
 }
@@ -234,12 +294,19 @@ fn generate_code(input: &ItemEnum, repr_ty: Ident) -> TokenStream {
 }
 
 fn extract_variants(input: &ItemEnum) -> (Vec<Ident>, Vec<Expr>) {
+    let mut prev_expr: Option<Expr> = None;
     let (names, discrs): (Vec<_>, Vec<_>) = input.variants.iter()
-        .map(|x| (
-            x.ident.clone(),
-            x.discriminant.as_ref()
-                .expect("no discriminant for a variant").1.clone()
-        )).unzip();
+        .map(|x| {
+            let expr = match x.discriminant.as_ref() {
+                Some(discr) => discr.1.clone(),
+                None => match prev_expr {
+                    Some(ref old_expr) => parse_quote!( 1 + #old_expr ),
+                    None => parse_quote!( 0 ),
+                }
+            };
+            prev_expr = Some(expr.clone());
+            ( x.ident.clone(), expr )
+        }).unzip();
     (names, discrs)
 }
 
@@ -277,22 +344,24 @@ fn validate(vars: &punctuated::Punctuated<Variant, token::Comma>) {
 fn convert_enum(input: &ItemEnum, compiler_repr_ty: Ident) -> ItemEnum {
     let mut variants = input.variants.clone();
 
-    let mut prev_expr: Expr = parse_quote!( 0 as #compiler_repr_ty );
+    let mut prev_expr: Option<Expr> = None;
     variants.iter_mut().for_each(|ref mut var| {
         let discr_opt = var.discriminant.clone();
         let (eq, new_expr): (syn::token::Eq, Expr) = match discr_opt {
             Some(discr) => {
-                let expr = discr.1.into_token_stream();
-                ( discr.0,
-                    parse_quote!( (#expr) as #compiler_repr_ty ) )
+                let old_expr = discr.1.into_token_stream();
+                (discr.0, parse_quote!( (#old_expr) as #compiler_repr_ty ))
             },
             None => {
-                let expr = prev_expr.clone();
-                ( syn::token::Eq { spans: [Span::call_site(),] },
-                    parse_quote!( (1 + (#expr)) as #compiler_repr_ty ) )
+                let expr = match prev_expr.clone() {
+                    Some(old_expr) =>
+                        parse_quote!( (1 + (#old_expr)) as #compiler_repr_ty ),
+                    None => parse_quote!( 0 as #compiler_repr_ty ),
+                };
+                (syn::token::Eq { spans: [Span::call_site(),] }, expr)
             },
         };
-        prev_expr = new_expr.clone();
+        prev_expr = Some(new_expr.clone());
         var.discriminant = Some((eq, new_expr));
     });
 
