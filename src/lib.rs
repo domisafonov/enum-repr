@@ -180,10 +180,10 @@ pub fn EnumRepr(
         _ => Ident::new(&"isize", Span::call_site())
     };
 
-    let mut ret: TokenStream = convert_enum(&input, compiler_repr_ty)
-        .into_token_stream().into();
+    let new_enum = convert_enum(&input, compiler_repr_ty);
+    let mut ret: TokenStream = new_enum.clone().into_token_stream().into();
 
-    let gen = generate_code(&input, repr_ty);
+    let gen = generate_code(&new_enum, repr_ty);
     ret.extend(gen);
     ret
 }
@@ -277,11 +277,23 @@ fn validate(vars: &punctuated::Punctuated<Variant, token::Comma>) {
 fn convert_enum(input: &ItemEnum, compiler_repr_ty: Ident) -> ItemEnum {
     let mut variants = input.variants.clone();
 
+    let mut prev_expr: Expr = parse_quote!( 0 as #compiler_repr_ty );
     variants.iter_mut().for_each(|ref mut var| {
-        let discr = var.discriminant.clone().unwrap();
-        let expr = discr.1.into_token_stream();
-        let new_expr = parse_quote!( (#expr) as #compiler_repr_ty );
-        var.discriminant = Some((discr.0, new_expr));
+        let discr_opt = var.discriminant.clone();
+        let (eq, new_expr): (syn::token::Eq, Expr) = match discr_opt {
+            Some(discr) => {
+                let expr = discr.1.into_token_stream();
+                ( discr.0,
+                    parse_quote!( (#expr) as #compiler_repr_ty ) )
+            },
+            None => {
+                let expr = prev_expr.clone();
+                ( syn::token::Eq { spans: [Span::call_site(),] },
+                    parse_quote!( (1 + (#expr)) as #compiler_repr_ty ) )
+            },
+        };
+        prev_expr = new_expr.clone();
+        var.discriminant = Some((eq, new_expr));
     });
 
     let mut attrs = input.attrs.clone();
