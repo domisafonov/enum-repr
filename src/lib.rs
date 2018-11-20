@@ -271,15 +271,15 @@ pub fn EnumRepr(
         _ => Ident::new(&"isize", Span::call_site())
     };
 
-    let new_enum = convert_enum(&input, compiler_repr_ty, implicit);
+    let new_enum = convert_enum(&input, &compiler_repr_ty, implicit);
     let mut ret: TokenStream = new_enum.into_token_stream().into();
 
-    let gen = generate_code(&input, repr_ty);
+    let gen = generate_code(&input, &repr_ty);
     ret.extend(gen);
     ret
 }
 
-fn generate_code(input: &ItemEnum, repr_ty: Ident) -> TokenStream {
+fn generate_code(input: &ItemEnum, repr_ty: &Ident) -> TokenStream {
     let ty = input.ident.clone();
     let vis = input.vis.clone();
     let (names, discrs) = extract_variants(input);
@@ -392,7 +392,11 @@ fn validate(vars: &punctuated::Punctuated<Variant, token::Comma>) {
     }
 }
 
-fn convert_enum(input: &ItemEnum, compiler_repr_ty: Ident, implicit: bool) -> ItemEnum {
+fn convert_enum(
+    input: &ItemEnum,
+    compiler_repr_ty: &Ident,
+    implicit: bool
+) -> ItemEnum {
     let mut variants = input.variants.clone();
 
     let mut prev_expr: Option<Expr> = None;
