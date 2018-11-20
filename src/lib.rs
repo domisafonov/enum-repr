@@ -99,6 +99,69 @@
 //! # fn main() {}
 //! ```
 //!
+//! Discriminants can be implicit if `implicit = true`:
+//! ```
+//! # extern crate enum_repr;
+//! # extern crate libc;
+//! #
+//! # use libc::*;
+//! #
+//! # use enum_repr::EnumRepr;
+//! #
+//!
+//! #[EnumRepr(type = "c_int", implicit = true)]
+//! #[derive(Debug, PartialEq)]
+//! pub enum Test {
+//!     A,
+//!     B,
+//!     C = 5,
+//!     D,
+//! }
+//!
+//! fn main() {
+//!     assert_eq!(Test::B.repr(), 1);
+//!     assert_eq!(Test::from_repr(6), Some(Test::D));
+//!     assert!(Test::from_repr(2).is_none());
+//! }
+//! ```
+//!
+//! Using implicit discriminants without setting the flag is an error:
+//! ```compile_fail
+//! # extern crate enum_repr;
+//! # extern crate libc;
+//! #
+//! # use libc::*;
+//! #
+//! # use enum_repr::EnumRepr;
+//! #
+//!
+//! #[EnumRepr(type = "c_int")]
+//! pub enum Test {
+//!     A,
+//!     B = 3
+//! }
+//! #
+//! # fn main() {}
+//! ```
+//!
+//! Take extra care to avoid collisions when using implicit discriminants:
+//! ```compile_fail
+//! # #![deny(overflowing_literals)]
+//! # extern crate enum_repr;
+//! #
+//! # use enum_repr::EnumRepr;
+//! #
+//! #[EnumRepr(type = "u8", implicit = true)]
+//! enum Test {
+//!     A = 1,
+//!     B,
+//!     C,
+//!     D = 3,
+//! }
+//! #
+//! # fn main() {}
+//! ```
+//!
 //! Out of bound discriminants fail to compile:
 //! ```compile_fail
 //! # #![deny(overflowing_literals)]
@@ -109,6 +172,22 @@
 //! #[EnumRepr(type = "u8")]
 //! enum Test {
 //!     A = 256
+//! }
+//! #
+//! # fn main() {}
+//! ```
+//!
+//! Even if they are implicit:
+//! ```compile_fail
+//! # #![deny(overflowing_literals)]
+//! # extern crate enum_repr;
+//! #
+//! # use enum_repr::EnumRepr;
+//! #
+//! #[EnumRepr(type = "u8", implicit = true)]
+//! enum Test {
+//!     A = 255,
+//!     B
 //! }
 //! #
 //! # fn main() {}
@@ -162,6 +241,18 @@ use proc_macro::TokenStream;
 use quote::ToTokens;
 use syn::*;
 
+type Args = punctuated::Punctuated<NestedMeta, token::Comma>;
+
+struct ArgsWrapper {
+    args: Args,
+}
+
+impl syn::parse::Parse for ArgsWrapper {
+    fn parse(input: syn::parse::ParseStream) -> syn::parse::Result<Self> {
+        Args::parse_terminated(input).map(|args| ArgsWrapper { args })
+    }
+}
+
 /// The code generator
 #[allow(non_snake_case)]
 #[proc_macro_attribute]
@@ -173,15 +264,15 @@ pub fn EnumRepr(
         .expect("#[EnumRepr] must only be used on enums");
     validate(&input.variants);
 
-    let repr_ty = get_repr_type(args);
+    let (repr_ty, implicit) = get_repr_type(args);
     let compiler_repr_ty = match repr_ty.to_string().as_str() {
         "i8" | "i16" | "i32" | "i64" | "i128"
         | "u8" | "u16" | "u32" | "u64" | "u128" | "usize" => repr_ty.clone(),
         _ => Ident::new(&"isize", Span::call_site())
     };
 
-    let mut ret: TokenStream = convert_enum(&input, compiler_repr_ty)
-        .into_token_stream().into();
+    let new_enum = convert_enum(&input, compiler_repr_ty, implicit);
+    let mut ret: TokenStream = new_enum.into_token_stream().into();
 
     let gen = generate_code(&input, repr_ty);
     ret.extend(gen);
@@ -234,32 +325,59 @@ fn generate_code(input: &ItemEnum, repr_ty: Ident) -> TokenStream {
 }
 
 fn extract_variants(input: &ItemEnum) -> (Vec<Ident>, Vec<Expr>) {
+    let mut prev_expr: Option<Expr> = None;
     let (names, discrs): (Vec<_>, Vec<_>) = input.variants.iter()
-        .map(|x| (
-            x.ident.clone(),
-            x.discriminant.as_ref()
-                .expect("no discriminant for a variant").1.clone()
-        )).unzip();
+        .map(|x| {
+            let expr = match x.discriminant.as_ref() {
+                Some(discr) => discr.1.clone(),
+                None => match prev_expr {
+                    Some(ref old_expr) => parse_quote!( 1 + #old_expr ),
+                    None => parse_quote!( 0 ),
+                }
+            };
+            prev_expr = Some(expr.clone());
+            ( x.ident.clone(), expr )
+        }).unzip();
     (names, discrs)
 }
 
-fn get_repr_type(args: TokenStream) -> Ident {
-    let args = syn::parse::<Meta>(args).expect("specify repr type in format \
-            \"#[EnumRepr]\"");
-    match args {
-        Meta::NameValue(MetaNameValue {
-            ident, lit: Lit::Str(repr_ty), ..
-        }) => {
-            if ident.to_string() != "type" {
-                panic!("#[EnumRepr] accepts one argument named \"type\"")
+fn get_repr_type(args: TokenStream) -> (Ident, bool) {
+    let mut repr_type = None;
+    let mut implicit = false;
+    let args = syn::parse::<ArgsWrapper>(args)
+        .expect("specify repr type in format \"#[EnumRepr]\"").args;
+    args.iter().for_each(|arg| {
+            match arg {
+                NestedMeta::Meta(Meta::NameValue(MetaNameValue {
+                    ident, lit, ..
+                })) => {
+                    let param = ident.to_string();
+                    if param == "type" {
+                        repr_type = match lit {
+                            Lit::Str(repr_ty) => Some(Ident::new(
+                                &repr_ty.value(),
+                                Span::call_site()
+                            )),
+                            _ => panic!("\"type\" parameter must be a string")
+                        }
+                    } else if param == "implicit" {
+                        implicit = match lit {
+                            Lit::Bool(imp) => imp.value,
+                            _ => panic!("\"implicit\" parameter must be bool")
+                        }
+                    } else {
+                        eprintln!("{}", param);
+                        panic!("#[EnumRepr] accepts arguments named \
+                            \"type\" and \"implicit\"")
+                    }
+                },
+                _ => panic!("specify repr type in format \
+                    \"#[EnumRepr(type = \"TYPE\")]\"")
             }
-            Ident::new(
-                &repr_ty.value(),
-                Span::call_site()
-            )
-        },
-        _ => panic!("specify repr type in format \
-            \"#[EnumRepr(type = \"TYPE\")]\"")
+        });
+    match repr_type {
+        Some(repr_ty) => (repr_ty, implicit),
+        None => panic!("\"type \" parameter is required")
     }
 }
 
@@ -274,14 +392,31 @@ fn validate(vars: &punctuated::Punctuated<Variant, token::Comma>) {
     }
 }
 
-fn convert_enum(input: &ItemEnum, compiler_repr_ty: Ident) -> ItemEnum {
+fn convert_enum(input: &ItemEnum, compiler_repr_ty: Ident, implicit: bool) -> ItemEnum {
     let mut variants = input.variants.clone();
 
+    let mut prev_expr: Option<Expr> = None;
     variants.iter_mut().for_each(|ref mut var| {
-        let discr = var.discriminant.clone().unwrap();
-        let expr = discr.1.into_token_stream();
-        let new_expr = parse_quote!( (#expr) as #compiler_repr_ty );
-        var.discriminant = Some((discr.0, new_expr));
+        let discr_opt = var.discriminant.clone();
+        let (eq, new_expr): (syn::token::Eq, Expr) = match discr_opt {
+            Some(discr) => {
+                let old_expr = discr.1.into_token_stream();
+                (discr.0, parse_quote!( (#old_expr) as #compiler_repr_ty ))
+            },
+            None => {
+                if !implicit {
+                    panic!("use implicit = true to enable implicit discriminants")
+                }
+                let expr = match prev_expr.clone() {
+                    Some(old_expr) =>
+                        parse_quote!( (1 + (#old_expr)) as #compiler_repr_ty ),
+                    None => parse_quote!( 0 as #compiler_repr_ty ),
+                };
+                (syn::token::Eq { spans: [Span::call_site(),] }, expr)
+            },
+        };
+        prev_expr = Some(new_expr.clone());
+        var.discriminant = Some((eq, new_expr));
     });
 
     let mut attrs = input.attrs.clone();
