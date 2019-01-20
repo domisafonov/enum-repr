@@ -2,6 +2,7 @@
 name = "nostdtest"
 version = "0.1.0"
 authors = ["Dmitry Safonov <dimanss47@dimanss47.net>"]
+license = "MIT OR Apache-2.0"
 
 [dependencies.enum-repr]
 path = "../../"

@@ -1,13 +1,13 @@
 [package]
 name = "enum-repr"
-version = "0.2.2"
+version = "0.2.3"
 authors = ["Dmitry Safonov <dimanss47@dimanss47.net>"]
 description = "Derive enum repr conversions compatible with type aliases."
 repository = "https://github.com/dmnsafonov/enum-repr"
 readme = "README.md"
 keywords = ["constant", "discriminant", "enum", "repr"]
 categories = ["no-std", "rust-patterns"]
-license = "LGPL-3.0-only"
+license = "MIT OR Apache-2.0"
 
 [lib]
 proc-macro = true
