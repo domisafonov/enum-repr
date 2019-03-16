@@ -4,7 +4,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#![cfg_attr(feature = "nightly", warn(clippy::pedantic))]
+#![warn(clippy::pedantic)]
 
 #![recursion_limit = "128"]
 
@@ -255,7 +255,7 @@ struct ArgsWrapper {
 
 impl syn::parse::Parse for ArgsWrapper {
     fn parse(input: syn::parse::ParseStream) -> syn::parse::Result<Self> {
-        Args::parse_terminated(input).map(|args| ArgsWrapper { args })
+        Args::parse_terminated(input).map(|args| Self { args })
     }
 }
 
@@ -408,22 +408,21 @@ fn convert_enum(
     let mut prev_expr: Option<Expr> = None;
     variants.iter_mut().for_each(|ref mut var| {
         let discr_opt = var.discriminant.clone();
-        let (eq, new_expr): (syn::token::Eq, Expr) = match discr_opt {
-            Some(discr) => {
-                let old_expr = discr.1.into_token_stream();
-                (discr.0, parse_quote!( (#old_expr) as #compiler_repr_ty ))
-            },
-            None => {
-                if !implicit {
-                    panic!("use implicit = true to enable implicit discriminants")
-                }
-                let expr = match prev_expr.clone() {
-                    Some(old_expr) =>
-                        parse_quote!( (1 + (#old_expr)) as #compiler_repr_ty ),
-                    None => parse_quote!( 0 as #compiler_repr_ty ),
-                };
-                (syn::token::Eq { spans: [Span::call_site(),] }, expr)
-            },
+        let (eq, new_expr): (syn::token::Eq, Expr) = if let Some(discr) = discr_opt {
+            let old_expr = discr.1.into_token_stream();
+            (discr.0, parse_quote!( (#old_expr) as #compiler_repr_ty ))
+        } else {
+            if !implicit {
+                panic!("use implicit = true to enable implicit discriminants")
+            }
+
+            let expr = if let Some(old_expr) = prev_expr.clone() {
+                parse_quote!( (1 + (#old_expr)) as #compiler_repr_ty )
+            } else {
+                parse_quote!( 0 as #compiler_repr_ty )
+            };
+
+            (syn::token::Eq { spans: [Span::call_site(),] }, expr)
         };
         prev_expr = Some(new_expr.clone());
         var.discriminant = Some((eq, new_expr));
