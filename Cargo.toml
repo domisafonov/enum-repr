@@ -14,9 +14,9 @@ license = "MIT OR Apache-2.0"
 proc-macro = true
 
 [dependencies]
-proc-macro2 = "^0.4.8"
-quote = "^0.6.3"
-syn = { version = "^0.15.17", features = ["full"] }
+proc-macro2 = "1"
+quote = "1"
+syn = { version = "1", features = ["full"] }
 
 [dev-dependencies]
 libc = "^0.2.42"

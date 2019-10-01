@@ -355,9 +355,9 @@ fn get_repr_type(args: TokenStream) -> (Ident, bool) {
     args.iter().for_each(|arg| {
             match arg {
                 NestedMeta::Meta(Meta::NameValue(MetaNameValue {
-                    ident, lit, ..
+                    path, lit, ..
                 })) => {
-                    let param = ident.to_string();
+                    let param = path.get_ident().unwrap().to_string();
                     if param == "type" {
                         repr_type = match lit {
                             Lit::Str(repr_ty) => Some(Ident::new(
