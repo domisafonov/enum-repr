@@ -1,6 +1,6 @@
 [package]
 name = "enum-repr"
-version = "0.2.5"
+version = "0.2.6"
 edition = "2018"
 authors = ["Dmitry Safonov <dimanss47@dimanss47.net>"]
 description = "Derive enum repr conversions compatible with type aliases."
@@ -14,9 +14,9 @@ license = "MIT OR Apache-2.0"
 proc-macro = true
 
 [dependencies]
-proc-macro2 = "1"
-quote = "1"
-syn = { version = "1", features = ["full"] }
+proc-macro2 = "^1"
+quote = "^1"
+syn = { version = "^1", features = ["full"] }
 
 [dev-dependencies]
 libc = "^0.2.42"

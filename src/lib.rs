@@ -45,11 +45,9 @@
 //!     // …
 //! }
 //!
-//! fn main() {
-//!     assert_eq!(IpProto::IP.repr(), IPPROTO_IP);
-//!     assert_eq!(IpProto::from_repr(IPPROTO_IPV6), Some(IpProto::IPv6));
-//!     assert!(IpProto::from_repr(12345).is_none());
-//! }
+//! assert_eq!(IpProto::IP.repr(), IPPROTO_IP);
+//! assert_eq!(IpProto::from_repr(IPPROTO_IPV6), Some(IpProto::IPv6));
+//! assert!(IpProto::from_repr(12345).is_none());
 //! ```
 //!
 //! ```
@@ -76,11 +74,11 @@
 //!
 //! // …
 //!
-//! # fn main() { unsafe {
-//! assert!(
-//!    socket(InetDomain::Inet.repr(), SocketType::Stream.repr(), 0) != -1
-//! );
-//! # }}
+//! unsafe {
+//!     assert!(
+//!        socket(InetDomain::Inet.repr(), SocketType::Stream.repr(), 0) != -1
+//!     );
+//! }
 //! ```
 //!
 //! ```no_run
@@ -101,8 +99,6 @@
 //!     IPv6 = IPPROTO_IPV6,
 //!     // …
 //! }
-//! #
-//! # fn main() {}
 //! ```
 //!
 //! Discriminants can be implicit if `implicit = true`:
@@ -124,11 +120,9 @@
 //!     D,
 //! }
 //!
-//! fn main() {
-//!     assert_eq!(Test::B.repr(), 1);
-//!     assert_eq!(Test::from_repr(6), Some(Test::D));
-//!     assert!(Test::from_repr(2).is_none());
-//! }
+//! assert_eq!(Test::B.repr(), 1);
+//! assert_eq!(Test::from_repr(6), Some(Test::D));
+//! assert!(Test::from_repr(2).is_none());
 //! ```
 //!
 //! Using implicit discriminants without setting the flag is an error:
@@ -146,8 +140,6 @@
 //!     A,
 //!     B = 3
 //! }
-//! #
-//! # fn main() {}
 //! ```
 //!
 //! Take extra care to avoid collisions when using implicit discriminants:
@@ -164,8 +156,6 @@
 //!     C,
 //!     D = 3,
 //! }
-//! #
-//! # fn main() {}
 //! ```
 //!
 //! Out of bound discriminants fail to compile:
@@ -179,8 +169,6 @@
 //! enum Test {
 //!     A = 256
 //! }
-//! #
-//! # fn main() {}
 //! ```
 //!
 //! Even if they are implicit:
@@ -195,8 +183,6 @@
 //!     A = 255,
 //!     B
 //! }
-//! #
-//! # fn main() {}
 //! ```
 //!
 //! Discriminants of a wrong type fail to compile as well:
@@ -212,8 +198,6 @@
 //! enum Test {
 //!     A = C
 //! }
-//! #
-//! # fn main() {}
 //! ```
 //!
 //! Using the actual enum discriminant representation:
@@ -230,9 +214,7 @@
 //!     A = 1
 //! }
 //!
-//! fn main() {
-//!     assert_eq!(size_of::<u8>(), size_of::<Test>());
-//! }
+//! assert_eq!(size_of::<u8>(), size_of::<Test>());
 //! ```
 
 extern crate proc_macro;
